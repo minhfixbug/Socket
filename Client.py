@@ -3,6 +3,8 @@ import time
 import threading
 import os
 
+from tqdm import tqdm
+
 # Cấu hình địa chỉ Server
 SERVER_IP = "127.0.0.1"
 SERVER_PORT = 12345
@@ -15,13 +17,15 @@ client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 print_lock = threading.Lock()
 
 # Hàm hiển thị tiến độ tải của tất cả các phần
-def display_progress(file_name, progress, start_time):
-    with print_lock:
-        os.system('cls' if os.name == 'nt' else 'clear')  # Xóa màn hình trước khi in trạng thái mới
-        elapsed_time = time.time() - start_time
-        for part_number, percent in enumerate(progress):
-            print(f"{file_name} - Phần {part_number + 1}: Đang tải... {percent}%")
-        print(f"Thời gian đã trôi qua: {elapsed_time:.2f} giây")
+# def display_progress(file_name, progress, start_time):
+#     with print_lock:
+#         os.system('cls' if os.name == 'nt' else 'clear')  # Xóa màn hình trước khi in trạng thái mới
+#         elapsed_time = time.time() - start_time
+#         print(f'File: {file_name}')
+#         for part_number, percent in enumerate(progress):
+#             # print(f"{file_name} - Phần {part_number + 1}: Đang tải... {percent}%")
+#             tqdm.write(f"Phần {part_number + 1}: [{'#' * (percent // 2)}{'.' * (50 - (percent // 2))}] {percent}%")
+#         print(f"Thời gian đã trôi qua: {elapsed_time:.2f} giây")
 
 # Hàm tải xuống một phần của file từ máy cục bộ
 def download_part(file_path, start, end, part_number, progress, start_time):
@@ -31,15 +35,19 @@ def download_part(file_path, start, end, part_number, progress, start_time):
         with open(part_file_name, "wb") as part_file:
             total_length = end - start + 1
             downloaded = 0
-            while downloaded < total_length:
-                chunk = source_file.read(min(4096, total_length - downloaded))
-                if not chunk:
-                    break
-                part_file.write(chunk)
-                downloaded += len(chunk)
-                progress[part_number] = int((downloaded / total_length) * 100)
-                display_progress(file_path, progress, start_time)
-    print(f"Đã tải xong phần {part_number + 1}")
+            with tqdm(total=100, desc=f"Phần {part_number + 1}", position=part_number, leave=True) as pbar:
+                while downloaded < total_length:
+                    chunk = source_file.read(min(4096, total_length - downloaded))
+                    if not chunk:
+                        break
+                    part_file.write(chunk)
+                    downloaded += len(chunk)
+                    # progress[part_number] = int((downloaded / total_length) * 100)
+                    # display_progress(file_path, progress, start_time)
+                    percent = int((downloaded / total_length) * 100)
+                    progress[part_number] = percent
+                    pbar.update(percent - pbar.n)
+    # print(f"Đã tải xong phần {part_number + 1}")
 
 # Hàm ghép tất cả các phần lại thành file hoàn chỉnh
 def merge_file_parts(file_name, total_parts, output_file_name):
@@ -47,12 +55,13 @@ def merge_file_parts(file_name, total_parts, output_file_name):
         with open(output_file_name, "wb") as merged_file:
             for part_number in range(total_parts):
                 part_file_name = f"{file_name}.part{part_number}"
-                print(f"Đang ghép file phần: {part_file_name}")
+                # print(f"Đang ghép file phần: {part_file_name}")
+                tqdm.write(f"Đang ghép file phần: {part_file_name}")
                 with open(part_file_name, "rb") as part_file:
                     merged_file.write(part_file.read())
-        print(f"Đã ghép xong file hoàn chỉnh: {output_file_name}")
+        tqdm.write(f"Đã ghép xong file hoàn chỉnh: {output_file_name}")
     except Exception as e:
-        print(f"Lỗi khi ghép các phần của file: {e}")
+        tqdm.write(f"Lỗi khi ghép các phần của file: {e}")
 
 # Hàm tải xuống file với 4 kết nối song song
 def download_file_parallel(file_path, total_parts):
@@ -72,10 +81,15 @@ def download_file_parallel(file_path, total_parts):
     for thread in threads:
         thread.join()
 
+    elapsed_time = time.time() - start_time
+
+    for part_number in range(total_parts):
+        tqdm.write(f"Đã tải xong phần {part_number + 1}")
+
     # Ghép các phần lại thành file hoàn chỉnh với tên mới
     output_file_name = f"{os.path.splitext(file_path)[0]}_downloaded{os.path.splitext(file_path)[1]}"
     merge_file_parts(file_path, total_parts, output_file_name)
-    print("Tải xuống hoàn tất.")
+    tqdm.write(f'Tải xuống hoàn tất. Thời gian: {elapsed_time:.2f} giây')
 
 # Hàm đọc danh sách file từ input.txt
 def read_input_file(file_path):
@@ -88,8 +102,8 @@ def get_file_list():
         client_socket.sendto("GET_FILE_LIST".encode(), (SERVER_IP, SERVER_PORT))
         data, _ = client_socket.recvfrom(BUFFER_SIZE)
         file_list = data.decode()
-        print("Danh sách file nhận được từ Server:")
-        print(file_list)
+        tqdm.write("Danh sách file nhận được từ Server:")
+        tqdm.write(file_list)
         return file_list
     except Exception as e:
         print(f"Lỗi khi lấy danh sách file: {e}")
@@ -106,15 +120,15 @@ def main():
 
             if new_files:
                 for file_name in new_files:
-                    print(f"Bắt đầu tải file: {file_name}")
+                    tqdm.write(f"Bắt đầu tải file: {file_name}")
                     download_file_parallel(file_name, 4)
                     downloaded_files.add(file_name)
             else:
-                print("Không có file mới cần tải.")
+                tqdm.write("Không có file mới cần tải.")
 
             time.sleep(5)
         except Exception as e:
-            print(f"Lỗi khi lấy danh sách file: {e}")
+            tqdm.write(f"Lỗi khi lấy danh sách file: {e}")
 
 # Chạy chương trình
 if __name__ == "__main__":
