@@ -1,2 +1,2 @@
-File1.zip
-File2.zip
+20MB.zip
+forest.jpg

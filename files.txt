@@ -1,0 +1,6 @@
+1GB.zip 1023.98MB
+200MB.zip 200.0MB
+20MB.zip 20.0MB
+50MB.zip 50.0MB
+forest.jpg 0.65MB
+image.jpg 0.61MB
