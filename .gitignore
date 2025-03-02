@@ -1,0 +1,5 @@
+.vscode
+*.zip
+*.jpg
+downloads
+__pycache__
